@@ -1,0 +1,223 @@
+#!/usr/local/bin/python3
+
+import cv2
+import datetime
+import time
+
+
+def reset_attempts():
+    return 50
+
+
+def process_video(attempts):
+
+    while(True):
+        (grabbed, frame) = camera.read()
+
+        if not grabbed:
+            print("disconnected!")
+            camera.release()
+
+            if attempts > 0:
+                time.sleep(5)
+                return True
+            else:
+                return False
+
+
+recall = True
+attempts = reset_attempts()
+
+while(recall):
+    camera = cv2.VideoCapture("rtsp://<ip><port>/live0.264")
+
+    if camera.isOpened():
+        print("[INFO] Camera connected at " +
+              datetime.datetime.now().strftime("%m-%d-%Y %I:%M:%S%p"))
+        attempts = reset_attempts()
+        recall = process_video(attempts)
+    else:
+        print("Camera not opened " +
+              datetime.datetime.now().strftime("%m-%d-%Y %I:%M:%S%p"))
+        camera.release()
+        attempts -= 1
+        print("attempts: " + str(attempts))
+
+        # give the camera some time to recover
+        time.sleep(5)
+        continue
+
+
+
+
+
+
+
+
+
+
+
+try:
+
+    vid = cv2.VideoCapture('rtsp://admin:root1234@192.168.1.65:554/out.h264')
+    if not vid.isOpened():
+        print("Camera Connected but video feed not available")
+
+    timeNow = str(time.strftime("%H%M%S"))
+    fileName = './data/video/results' + timeNow + '.avi'
+    t2 = str(random.randint(0, 9))
+    codec = cv2.VideoWriter_fourcc(*'XVID')
+    vid_fps = int(vid.get(cv2.CAP_PROP_FPS))
+    # print(cv2.CAP_PROP_FPS)
+    # print(vid.get(cv2.CAP_PROP_FPS))
+
+    if vid_fps > 25:
+        vid_fps = int(25)
+    # vid_fps = int(frame_rate)
+
+    vid_width, vid_height = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH)), int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out = cv2.VideoWriter(fileName, codec, vid_fps, (vid_width, vid_height))
+
+    from _collections import deque
+
+    pts = [deque(maxlen=30) for _ in range(1000)]
+
+    counter = []
+    person_counter = []
+
+    prev = 0
+
+    while True:
+        time_elpased = time.time() - prev
+        _, img = vid.read()
+
+        if img is None:
+            # prev = time.time()
+            print('Completed')
+            # breaks
+        # print(time_elpased)
+        # print(2./ frame_rate)
+        if time_elpased > 1. / frame_rate:
+            prev = time.time()
+            img_in = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img_in = tf.expand_dims(img_in, 0)
+            img_in = transform_images(img_in, 416)
+
+            t1 = time.time()
+
+            boxes, scores, classes, nums = yolo.predict(img_in)
+
+            classes = classes[0]
+            names = []
+            for i in range(len(classes)):
+                names.append(class_names[int(classes[i])])
+            names = np.array(names)
+            converted_boxes = convert_boxes(img, boxes[0])
+            features = encoder(img, converted_boxes)
+
+            detections = [Detection(bbox, score, class_name, feature) for bbox, score, class_name, feature in
+                          zip(converted_boxes, scores[0], names, features)]
+
+            boxs = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            classes = np.array([d.class_name for d in detections])
+            indices = preprocessing.non_max_suppression(boxs, classes, nms_max_overlap, scores)
+            detections = [detections[i] for i in indices]
+
+            tracker.predict()
+            tracker.update(detections)
+
+            cmap = plt.get_cmap('tab20b')
+            colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
+
+            current_count = int(0)
+            current_person_count = int(0)
+
+            for track in tracker.tracks:
+                if not track.is_confirmed() or track.time_since_update > 1:
+                    continue
+                bbox = track.to_tlbr()
+                class_name = track.get_class()
+                color = colors[int(track.track_id) % len(colors)]
+                color = [i * 255 for i in color]
+
+                cv2.rectangle(img, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
+                cv2.rectangle(img, (int(bbox[0]), int(bbox[1] - 30)), (int(bbox[0]) + (len(class_name)
+                                                                                       + len(str(track.track_id))) * 17,
+                                                                       int(bbox[1])), color, -1)
+                cv2.putText(img, class_name + "-" + str(track.track_id), (int(bbox[0]), int(bbox[1] - 10)), 0, 0.75,
+                            (255, 255, 255), 2)
+
+                center = (int(((bbox[0]) + (bbox[2])) / 2), int(((bbox[1]) + (bbox[3])) / 2))
+                pts[track.track_id].append(center)
+
+                for j in range(1, len(pts[track.track_id])):
+                    if pts[track.track_id][j - 1] is None or pts[track.track_id][j] is None:
+                        continue
+                    thickness = int(np.sqrt(64 / float(j + 1)) * 2)
+                    cv2.line(img, (pts[track.track_id][j - 1]), (pts[track.track_id][j]), color, thickness)
+
+                height, width, _ = img.shape
+                print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+
+                # cv2.line(img, (int(width/2),0), (int(width/2), height),
+                #          (255, 255, 0), thickness=2)
+
+                cv2.line(img, (int(3 * width / 5 + width / 20), 0), (int(3 * width / 5 + width / 20), height),
+                         (0, 255, 0), thickness=2)
+                cv2.line(img, (int(3 * width / 5 - width / 20), 0), (int(3 * width / 5 - width / 20), height),
+                         (0, 255, 0), thickness=2)
+                #
+                # cv2.line(img, (0, int(3 * height / 5 + height / 20)), (width, int(3 * height / 5 + height / 20)),
+                #          (0, 255, 0), thickness=2)
+                # cv2.line(img, (0, int(3 * height / 5 - height / 20)), (width, int(3 * height / 5 - height / 20)),
+                #          (0, 255, 0), thickness=2)
+
+                center_y = int(((bbox[1]) + (bbox[3])) / 2)
+                center_x = int(((bbox[0]) + (bbox[2])) / 2)
+
+                if str(track.track_id) == "18":
+                    print(bbox)
+                    print(center_x, center_y, str(track.track_id))
+                    print(int(3 * width / 5 - width / 20))
+                    print(int(3 * width / 5 + width / 20))
+
+                # if int(3 * width / 5 - width / 20) >= center_y >= int(3 * width / 5 + width / 20) :
+                #     if class_name == 'car' or class_name == 'truck':
+                #         counter.append(int(track.track_id))
+                #         current_count += 1
+                #     if class_name == 'person':
+                #         person_counter.append(int(track.track_id))
+                #         current_person_count += 1
+                if int(3 * width / 5 + width / 20) >= center_x >= int(3 * width / 5 - width / 20):
+                    if class_name == 'car' or class_name == 'truck':
+                        counter.append(int(track.track_id))
+                        current_count += 1
+                    if class_name == 'person':
+                        person_counter.append(int(track.track_id))
+                        current_person_count += 1
+
+            total_count = len(set(counter))
+            total_person = len(set(person_counter))
+
+            # cv2.putText(img, "Current Vehicle Count: " + str(current_count), (0, 80), 0, 1, (0, 0, 255), 2)
+            # cv2.putText(img, "Total Vehicle Count: " + str(total_count), (0,130), 0, 1, (0,0,255), 2)
+            cv2.putText(img, "Current Person Count: " + str(current_person_count), (0, 180), 0, 1, (0, 0, 255), 2)
+            cv2.putText(img, "Total Person Count: " + str(total_person), (0, 230), 0, 1, (0, 0, 255), 2)
+
+            fps = 1. / (time.time() - t1)
+            cv2.putText(img, "FPS: {:.2f}".format(fps), (0, 30), 0, 1, (0, 0, 255), 2)
+            # cv2.resizeWindow('output', 1024, 768)
+            cv2.imshow(fileName, img)
+            out.write(img)
+
+            if cv2.waitKey(10) == ord('q'):
+                print("forced complete")
+                break
+    vid.release()
+    out.release()
+    print(fileName)
+
+    cv2.destroyAllWindows()
+except Exception as e:
+    print("Error try", e)
